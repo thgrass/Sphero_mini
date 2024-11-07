@@ -15,7 +15,23 @@ if len(sys.argv) < 2:
 MAC = sys.argv[1] # Get MAC address from command line argument
 
 # Connect:
-sphero = sphero_mini.sphero_mini(MAC, verbosity = 1)
+sphero = sphero_mini.sphero_mini(MAC, verbosity = 4)
+
+# battery voltage
+sphero.getBatteryVoltage()
+print(f"Bettery voltage: {sphero.v_batt}v")
+
+# firmware version number
+sphero.returnMainApplicationVersion()
+print(f"Firmware version: {'.'.join(str(x) for x in sphero.firmware_version)}")
+
+# battery voltage
+sphero.getBatteryVoltage()
+print(f"Bettery voltage: {sphero.v_batt}v")
+
+# firmware version number
+sphero.returnMainApplicationVersion()
+print(f"Firmware version: {'.'.join(str(x) for x in sphero.firmware_version)}")
 
 # battery voltage
 sphero.getBatteryVoltage()
@@ -29,7 +45,9 @@ print(f"Firmware version: {'.'.join(str(x) for x in sphero.firmware_version)}")
 sphero.configureCollisionDetection(callback=collision_callback) # Use default thresholds and pass function object as callback
 
 sphero.setLEDColor(red = 0, green = 255, blue = 0) # Turn LEDs green
-print('Waiting for collision')
+#print('Waiting for collision')
 
 while(1):
-    sphero.wait(1)
+    sphero.wait(3)
+    sphero.getBatteryVoltage()
+    print(f"Bettery voltage: {sphero.v_batt}v")

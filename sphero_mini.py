@@ -4,6 +4,18 @@ from sphero_constants import *
 import struct
 import time
 import sys
+from collections import deque
+
+class Command:
+    def __init__(self, seq, dev_id, cmd_id, payload, timeout=10):
+        self.seq = seq
+        self.dev_id = dev_id
+        self.cmd_id = cmd_id
+        self.payload = payload
+        self.expected_ack = (dev_id, cmd_id, seq)
+        self.timestamp = time.time()
+        self.timeout = timeout
+
 
 class sphero_mini():
     def __init__(self, MACAddr, verbosity = 4, user_delegate = None):
@@ -18,6 +30,7 @@ class sphero_mini():
                                    # 2 = Init messages
                                    # 3 = Recieved commands
                                    # 4 = Acknowledgements
+        self.command_queue = deque()
         self.sequence = 1
         self.v_batt = None # will be updated with battery voltage when sphero.getBatteryVoltage() is called
         self.firmware_version = [] # will be updated with firware version when sphero.returnMainApplicationVersion() is called
@@ -64,6 +77,12 @@ class sphero_mini():
             print("[INIT] Configuring API dectriptor")
         self.API_descriptor.write(struct.pack('<bb', 0x01, 0x00), withResponse = True)
 
+        # Read garbage that may be in the notification service
+        while True:
+            if not self.p.waitForNotifications(0.1):  # Small timeout to catch pending notifications
+                break  # Exit when no more notifications are pending
+            print("Flushed a notification")
+
         self.wake()
 
         # Finished initializing:
@@ -89,7 +108,7 @@ class sphero_mini():
                    commID=powerCommandIDs["wake"],
                    payload=[]) # empty payload
 
-        self.getAcknowledgement("Wake")
+        self.getAcknowledgement()
 
     def sleep(self, deepSleep=False):
         '''
@@ -152,7 +171,7 @@ class sphero_mini():
             print("WARNING: roll speed parameter outside of allowed range (-255 to +255)")
 
         if speed < 0:
-            speed = -1*speed+256 # speed values > 256 in the send packet make the spero go in reverse
+            speed = -1*speed+256 # speed values > 256 in the send packet make the sphero go in reverse
 
         speedH = (speed & 0xFF00) >> 8
         speedL = speed & 0xFF
@@ -163,7 +182,7 @@ class sphero_mini():
                   commID = drivingCommands["driveWithHeading"],
                   payload = [speedL, headingH, headingL, speedH])
 
-        self.getAcknowledgement("Roll")
+        self.getAcknowledgement()
 
     def resetHeading(self):
         '''
@@ -179,7 +198,7 @@ class sphero_mini():
                   commID = drivingCommands["resetHeading"],
                   payload = []) #empty payload
 
-        self.getAcknowledgement("Heading")
+        self.getAcknowledgement()
 
     def returnMainApplicationVersion(self):
         '''
@@ -209,7 +228,7 @@ class sphero_mini():
                    payload=[]) # empty
 
         self.getAcknowledgement("Battery")
-
+        
     def stabilization(self, stab = True):
         '''
         Sends command to turn on/off the motor stabilization system (required when manually turning/aiming the sphero)
@@ -227,7 +246,7 @@ class sphero_mini():
                    commID=drivingCommands['stabilization'],
                    payload=[val])
 
-        self.getAcknowledgement("Stabilization")
+        self.getAcknowledgement()
 
     def wait(self, delay):
         '''
@@ -267,7 +286,7 @@ class sphero_mini():
 
         self.sequence += 1 # Increment sequence number, ensures we can identify response packets are for this command
         if self.sequence > 255:
-            self.sequence = 0
+            self.sequence = 1
 
         # Compute and append checksum and add EOP byte:
         # From Sphero docs: "The [checksum is the] modulo 256 sum of all the bytes
@@ -280,30 +299,18 @@ class sphero_mini():
         checksum = 0xff - checksum # bitwise 'not' to invert checksum bits
         sendBytes += [checksum, sendPacketConstants["EndOfPacket"]] # concatenate
 
+        command = Command(self.sequence-1, devID, commID, payload)
+        self.command_queue.append(command)
+
         # Convert numbers to bytes
         output = b"".join([x.to_bytes(1, byteorder='big') for x in sendBytes])
 
         #send to specified characteristic:
         characteristic.write(output, withResponse = True)
 
-    def getAcknowledgement(self, ack):
-        #wait up to 10 secs for correct acknowledgement to come in, including sequence number!
-        start = time.time()
-        while(1):
-            self.p.waitForNotifications(1)
-            if self.sphero_delegate.notification_seq == self.sequence-1: # use one less than sequence, because _send function increments it for next send. 
-                if self.verbosity > 3:
-                    print("[RESP {}] {}".format(self.sequence-1, self.sphero_delegate.notification_ack))
-                self.sphero_delegate.clear_notification()
-                break
-            elif self.sphero_delegate.notification_seq >= 0:
-                print("Unexpected ACK. Expected: {}/{}, received: {}/{}".format(
-                    ack, self.sequence, self.sphero_delegate.notification_ack.split()[0],
-                    self.sphero_delegate.notification_seq),
-                    file=sys.stderr)
-            if time.time() > start + 10:
-                print("Timeout waiting for acknowledgement: {}/{}".format(ack, self.sequence), file=sys.stderr)
-                break
+    def getAcknowledgement(self, ack_txt = ""):
+        while any(cmd.seq == (self.sequence+1) for cmd in self.command_queue):
+                self.p.waitForNotifications(0.1)
 
 # =======================================================================
 # The following functions are experimental:
@@ -522,6 +529,7 @@ class MyDelegate(btle.DefaultDelegate):
                     self.notificationPacket = [] # Discard this packet
                     return # exit
 
+
                 # Compute and append checksum and add EOP byte:
                 # From Sphero docs: "The [checksum is the] modulo 256 sum of all the bytes
                 #                   from the device ID through the end of the data payload,
@@ -540,53 +548,29 @@ class MyDelegate(btle.DefaultDelegate):
                 # Check if response packet:
                 if flags_bits & flags['isResponse']: # it is a response
 
-                    # Use device ID and command code to determine which command is being acknowledged:
-                    if devid == deviceID['powerInfo'] and commcode == powerCommandIDs['wake']:
-                        self.notification_ack = "Wake acknowledged" # Acknowledgement after wake command
-                        
-                    elif devid == deviceID['driving'] and commcode == drivingCommands['driveWithHeading']:
-                        self.notification_ack = "Roll command acknowledged"
+                    if not self.sphero_class.command_queue:
+                        print(f"Unexpected ACK: {ack}")
 
-                    elif devid == deviceID['driving'] and commcode == drivingCommands['stabilization']:
-                        self.notification_ack = "Stabilization command acknowledged"
+                    for command in list(self.sphero_class.command_queue):
+                        ack = (devid, commcode, seq) # bytes 3,4,5
+                        if ack == command.expected_ack:
+                            print(f"ACK matched for command: {ack}")
+                            self.sphero_class.command_queue.remove(command)
+                        current_time = time.time()
+                        if current_time - command.timestamp > command.timeout:
+                            print(f"Timeout for command: {command.expected_ack}")
+                            self.sphero_class.command_queue.remove(command)  # TODO: treat timeouted commands different!
 
-                    elif devid == deviceID['userIO'] and commcode == userIOCommandIDs['allLEDs']:
-                        self.notification_ack = "LED/backlight color command acknowledged"
-
-                    elif devid == deviceID['driving'] and commcode == drivingCommands["resetHeading"]:
-                        self.notification_ack = "Heading reset command acknowledged"
-
-                    elif devid == deviceID['sensor'] and commcode == sensorCommands["configureCollision"]:
-                        self.notification_ack = "Collision detection configuration acknowledged"
-
-                    elif devid == deviceID['sensor'] and commcode == sensorCommands["configureSensorStream"]:
-                        self.notification_ack = "Sensor stream configuration acknowledged"
-
-                    elif devid == deviceID['sensor'] and commcode == sensorCommands["sensorMask"]:
-                        self.notification_ack = "Mask configuration acknowledged"
-
-                    elif devid == deviceID['sensor'] and commcode == sensorCommands["sensor1"]:
-                        self.notification_ack = "Sensor1 acknowledged"
-
-                    elif devid == deviceID['sensor'] and commcode == sensorCommands["sensor2"]:
-                        self.notification_ack = "Sensor2 acknowledged"
-
-                    elif devid == deviceID['powerInfo'] and commcode == powerCommandIDs['batteryVoltage']:
+                    # Use device ID and command code to determine which command is being acknowledged, execute code:
+                    if devid == deviceID['powerInfo'] and commcode == powerCommandIDs['batteryVoltage']:
                         V_batt = notification_payload[2] + notification_payload[1]*256 + notification_payload[0]*65536
                         V_batt /= 100 # Notification gives V_batt in 10mV increments. Divide by 100 to get to volts.
                         self.notification_ack = "Battery voltage:" + str(V_batt) + "v"
                         self.sphero_class.v_batt = V_batt
-
                     elif devid == deviceID['systemInfo'] and commcode == SystemInfoCommands['mainApplicationVersion']:
                         version = '.'.join(str(x) for x in notification_payload)
                         self.notification_ack = "Firmware version: " + version
                         self.sphero_class.firmware_version = notification_payload
-                                                
-                    else:
-                        self.notification_ack = "Unknown acknowledgement" #print(self.notificationPacket)
-                        print(self.notificationPacket, "===================> Unknown ack packet")
-
-                    self.notification_seq = seq
 
                 else: # Not a response packet - therefore, asynchronous notification (e.g. collision detection, etc):
                     
@@ -631,5 +615,6 @@ class MyDelegate(btle.DefaultDelegate):
                     else:
                         self.notification_ack = "Unknown asynchronous notification" #print(self.notificationPacket)
                         print(self.notificationPacket, "===================> Unknown async packet")
-                        
+
                 self.notificationPacket = [] # Start new payload after this byte
+
