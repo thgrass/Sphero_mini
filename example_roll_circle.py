@@ -25,7 +25,7 @@ print(f"Firmware version: {'.'.join(str(x) for x in sphero.firmware_version)}")
 sphero.setLEDColor(red = 0, green = 0, blue = 0) # Turn main LED off
 sphero.stabilization(False) # Turn off stabilization
 sphero.setBackLEDIntensity(255) # turn back LED on
-sphero.wait(3) # Non-blocking pau`se
+sphero.wait(3) # Non-blocking pause
 sphero.resetHeading() # Reset heading
 sphero.stabilization(True) # Turn on stabilization
 sphero.setBackLEDIntensity(0) # Turn back LED off

@@ -8,8 +8,9 @@ def collision_callback():
 
 if len(sys.argv) < 2:
     print("Usage: 'python [this_file_name.py] [sphero MAC address]'")
-    print("eg f2:54:32:9d:68:a4")
+    print("eg C9:B7:C4:39:E5:BC")
     print("On Linux, use 'sudo hcitool lescan' to find your Sphero Mini's MAC address")
+    print("You can also store it in an environment variable..")
     exit(1)
 
 MAC = sys.argv[1] # Get MAC address from command line argument
@@ -18,27 +19,13 @@ MAC = sys.argv[1] # Get MAC address from command line argument
 sphero = sphero_mini.sphero_mini(MAC, verbosity = 4)
 
 # battery voltage
-sphero.getBatteryVoltage()
+while sphero.v_batt == None:
+    sphero.getBatteryVoltage()
 print(f"Bettery voltage: {sphero.v_batt}v")
 
 # firmware version number
-sphero.returnMainApplicationVersion()
-print(f"Firmware version: {'.'.join(str(x) for x in sphero.firmware_version)}")
-
-# battery voltage
-sphero.getBatteryVoltage()
-print(f"Bettery voltage: {sphero.v_batt}v")
-
-# firmware version number
-sphero.returnMainApplicationVersion()
-print(f"Firmware version: {'.'.join(str(x) for x in sphero.firmware_version)}")
-
-# battery voltage
-sphero.getBatteryVoltage()
-print(f"Bettery voltage: {sphero.v_batt}v")
-
-# firmware version number
-sphero.returnMainApplicationVersion()
+while sphero.firmware_version == []:
+    sphero.returnMainApplicationVersion()
 print(f"Firmware version: {'.'.join(str(x) for x in sphero.firmware_version)}")
 
 # Note: Collision detection is an experimental feature - sometimes crashes, with "unexpected response" from bluetooth module
