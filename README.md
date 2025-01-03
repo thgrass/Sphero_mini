@@ -1,3 +1,21 @@
+# Changes in this fork:
+I rewrote the BLE packet handling stuff so it does no longer crash in unexpected cases and improved the overall asynchronous handling of BLE events. I also changed the logging slightly (at verbosity level 4) to better debug unknown packages. Collision detection now works flawlessly for me. I changed some of the examples slightly and added a new one to help me debugging the BLE communications.
+
+# Remaining work / bugs:
+Sometimes my Sphero sends unknown notification packages not related to collision detection I do not know details about and hence do not parse them - it could be battery level related stuff or something else.
+Examples of these packages (in arrays of bytes):
+[141, 8, 19, 6, 255, 5, 218, 216]
+[141, 8, 19, 26, 255, 203, 216]
+
+Also sometimes I get checksum errors on some other packages - this could be systemic or occasional transmission errors, but seem to be always packages whose second byte is decimal 9. Example packages are:
+[141, 9, 26, 14, 65, 0, 171, 5, 216]
+[141, 9, 22, 7, 46, 0, 171, 35, 216]
+[141, 9, 26, 14, 35, 0, 171, 35, 216]
+[141, 9, 22, 7, 76, 0, 171, 5, 216]
+
+
+Below follows the original README:
+
 # Sphero Mini
 An unofficial Python library (work in progress) for controlling the [Sphero Mini](https://www.sphero.com/sphero-mini) robot. Note that, because the communications protocols are very different, this library will not work out-of-the-box for other types of Sphero robots (e.g. BB8, BB9, SPRK+, etc).
 
