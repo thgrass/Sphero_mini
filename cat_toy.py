@@ -27,11 +27,8 @@ def move_circle():
 
     # Approximate a circle by moving forward in short bursts, then adjusting heading slightly
     while(time.time() - start < 30):
-    
-        sphero.setLEDColor(red = 0, green = 0, blue = 255) # Turn main LED blue
         sphero.roll(30, angle)  # roll forwards (heading = 0) at speed = 30
-
-        sphero.wait(0.5)          # Keep rolling for 0.5 seconds
+        sphero.wait(0.2)          # Keep rolling for 0.5 seconds
 
         angle += angle_increment
         if angle >= 360:
