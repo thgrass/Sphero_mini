@@ -47,6 +47,17 @@ def move_line():
     sphero.roll(0, 0)       # stop
     sphero.wait(1)
 
+def check_battery():
+    volt = sphero.getBatteryVoltage()
+    if volt is not None:
+        if volt < 3.7:
+            print("## BATTERY LOW WARNING ##")
+        if volt < 3.65:
+            print("GRACEFUL SHUTDOWN DUE TO BATTERY (ALMOST) EMPTY")
+            sphero.sleep()
+            sphero.disconnect()
+            sys.exit(1)
+
 ###
 
 if len(sys.argv) < 2:
@@ -64,7 +75,7 @@ sphero = sphero_mini.sphero_mini(MAC, verbosity = 4)
 # battery voltage
 while sphero.v_batt == None:
     sphero.getBatteryVoltage()
-print(f"Bettery voltage: {sphero.v_batt}v")
+print(f"Battery voltage: {sphero.v_batt}v")
 
 # firmware version number
 while sphero.firmware_version == []:
@@ -74,8 +85,17 @@ print(f"Firmware version: {'.'.join(str(x) for x in sphero.firmware_version)}")
 # set callback(s)
 sphero.configureCollisionDetection(callback=collision_callback)
 
+#
+starttime = time.time()
+
+battery_check_time = starttime
+check_battery()
 
 # Main Loop
 while(1):
     move_circle()
     move_line()
+
+    if (time.time() - battery_check_time) > 300:	# Check every 5 min
+        check_battery()
+        battery_check_time = time.time()
