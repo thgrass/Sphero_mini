@@ -69,11 +69,12 @@ def hit_move():
     sphero.wait(0.2)
 
 def check_battery():
-    volt = sphero.getBatteryVoltage()
+    sphero.getBatteryVoltage()
+    volt = sphero.v_batt
     if volt is not None:
-        if volt < 3.7:
-            print("## BATTERY LOW WARNING ##")
         if volt < 3.65:
+            print("## BATTERY LOW WARNING ##")
+        if volt < 3.59:
             print("GRACEFUL SHUTDOWN DUE TO BATTERY (ALMOST) EMPTY")
             sphero.sleep()
             sphero.disconnect()
