@@ -8,8 +8,11 @@ num_collisions = 0
 
 # Collision handling callback(s)
 def collision_callback():
+    global num_collisions
+    global state
+    global hit_time
+
     if state == 'NORMAL':
-        global num_collisions
         num_collisions += 1
         print("COLLISION # " + str(num_collisions))
 
@@ -22,6 +25,7 @@ def collision_callback():
             sphero.setLEDColor(red = 0, green = 0, blue = 255)
 
         hit_time = time.time()
+        state = 'Hit'
 
     if state == 'Hit':
         return
@@ -90,40 +94,43 @@ if len(sys.argv) < 2:
     exit(1)
 
 MAC = sys.argv[1] # Get MAC address from command line argument
+try:
+    # Connect
+    sphero = sphero_mini.sphero_mini(MAC, verbosity = 4)
 
-# Connect
-sphero = sphero_mini.sphero_mini(MAC, verbosity = 4)
+    # battery voltage
+    while sphero.v_batt == None:
+        sphero.getBatteryVoltage()
+    print(f"Battery voltage: {sphero.v_batt}v")
 
-# battery voltage
-while sphero.v_batt == None:
-    sphero.getBatteryVoltage()
-print(f"Battery voltage: {sphero.v_batt}v")
+    # firmware version number
+    while sphero.firmware_version == []:
+        sphero.returnMainApplicationVersion()
+    print(f"Firmware version: {'.'.join(str(x) for x in sphero.firmware_version)}")
 
-# firmware version number
-while sphero.firmware_version == []:
-    sphero.returnMainApplicationVersion()
-print(f"Firmware version: {'.'.join(str(x) for x in sphero.firmware_version)}")
+    # set callback(s)
+    sphero.configureCollisionDetection(callback=collision_callback)
 
-# set callback(s)
-sphero.configureCollisionDetection(callback=collision_callback)
+    #
+    starttime = time.time()
 
-#
-starttime = time.time()
+    battery_check_time = starttime
 
-battery_check_time = starttime
-check_battery()
+    # Main Loop
+    while(1):
+        if state == 'NORMAL':
+            move_circle()
+            move_line()
 
-# Main Loop
-while(1):
-    if state == 'NORMAL':
-        move_circle()
-        move_line()
+        if state == 'Hit':
+            hit_move()
+            if (time.time() - hit_time) > 1:		# set state back to normal after 1s
+                state = 'NORMAL'
 
-    if state == 'HIT':
-        hit_move()
-        if (time.time() - hit_time) > 1:		# set state back to normal after 1s
-            state = 'NORMAL'
+        if (time.time() - battery_check_time) > 300:	# Check every 5 min
+            check_battery()
+            battery_check_time = time.time()
+except KeyboardInterrupt:
+    sphero.sleep()
+    sphero.disconnect()
 
-    if (time.time() - battery_check_time) > 300:	# Check every 5 min
-        check_battery()
-        battery_check_time = time.time()
