@@ -2,21 +2,29 @@ import sphero_mini
 import sys
 import time
 
+state = 'NORMAL'	# 'NORMAL' or 'HIT'
+hit_time = 0
 num_collisions = 0
 
 # Collision handling callback(s)
 def collision_callback():
-    global num_collisions
-    num_collisions += 1
-    print("COLLISION # " + str(num_collisions))
+    if state == 'NORMAL':
+        global num_collisions
+        num_collisions += 1
+        print("COLLISION # " + str(num_collisions))
 
-    r = num_collisions % 3
-    if r == 0:
-        sphero.setLEDColor(red = 255, green = 0, blue = 0)
-    if r == 1:
-        sphero.setLEDColor(red = 0, green = 255, blue = 0)
-    if r == 2:
-        sphero.setLEDColor(red = 0, green = 0, blue = 255)
+        r = num_collisions % 3
+        if r == 0:
+            sphero.setLEDColor(red = 255, green = 0, blue = 0)
+        if r == 1:
+            sphero.setLEDColor(red = 0, green = 255, blue = 0)
+        if r == 2:
+            sphero.setLEDColor(red = 0, green = 0, blue = 255)
+
+        hit_time = time.time()
+
+    if state == 'Hit':
+        return
 
 # regular functions
 def move_circle():
@@ -43,6 +51,22 @@ def move_line():
 
     sphero.roll(0, 0)       # stop
     sphero.wait(1)
+
+def hit_move():
+    sphero.roll(80, 0)
+    sphero.wait(0.1)
+    sphero.roll(0, 110)
+    sphero.wait(0.1)
+    sphero.roll(129, 0)
+    sphero.wait(0.2)
+    sphero.roll(0, 180)
+    sphero.wait(0.1)
+    sphero.roll(100, 0)
+    sphero.wait(0.3)
+    sphero.roll(50, 30)
+    sphero.wait(0.2)
+    sphero.roll(60, 300)
+    sphero.wait(0.2)
 
 def check_battery():
     volt = sphero.getBatteryVoltage()
@@ -90,8 +114,14 @@ check_battery()
 
 # Main Loop
 while(1):
-    move_circle()
-    move_line()
+    if state == 'NORMAL':
+        move_circle()
+        move_line()
+
+    if state == 'HIT':
+        hit_move()
+        if (time.time() - hit_time) > 1:		# set state back to normal after 1s
+            state = 'NORMAL'
 
     if (time.time() - battery_check_time) > 300:	# Check every 5 min
         check_battery()
